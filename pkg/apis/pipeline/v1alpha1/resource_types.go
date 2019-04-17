@@ -43,10 +43,11 @@ const (
 
 	// PipelineResourceTypeCloudEvent indicates that this source is a cloud event URI
 	PipelineResourceTypeCloudEvent PipelineResourceType = "cloudevent"
+	PipelineResourceTypePullRequest PipelineResourceType = "pullRequest"
 )
 
 // AllResourceTypes can be used for validation to check if a provided Resource type is one of the known types.
-var AllResourceTypes = []PipelineResourceType{PipelineResourceTypeGit, PipelineResourceTypeStorage, PipelineResourceTypeImage, PipelineResourceTypeCluster, PipelineResourceTypeCloudEvent}
+var AllResourceTypes = []PipelineResourceType{PipelineResourceTypeGit, PipelineResourceTypeStorage, PipelineResourceTypeImage, PipelineResourceTypeCluster, PipelineResourceTypeCloudEvent, PipelineResourceTypePullRequest}
 
 // PipelineResourceInterface interface to be implemented by different PipelineResource types
 type PipelineResourceInterface interface {
@@ -144,6 +145,8 @@ func ResourceFromType(r *PipelineResource) (PipelineResourceInterface, error) {
 		return NewStorageResource(r)
 	case PipelineResourceTypeCloudEvent:
 		return NewCloudEventResource(r)
+	case PipelineResourceTypePullRequest:
+		return NewPullRequestResource(r)
 	}
 	return nil, xerrors.Errorf("%s is an invalid or unimplemented PipelineResource", r.Spec.Type)
 }
