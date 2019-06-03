@@ -40,6 +40,18 @@ func NewFakeGitHub() *FakeGitHub {
 	return s
 }
 
+func prKey(r *http.Request) (key, error) {
+	pr, err := strconv.ParseInt(mux.Vars(r)["number"], 10, 64)
+	if err != nil {
+		return key{}, err
+	}
+	return key{
+		owner: mux.Vars(r)["owner"],
+		repo:  mux.Vars(r)["repo"],
+		id:    pr,
+	}, nil
+}
+
 // AddPullRequest adds the given pull request to the fake GitHub server.
 func (g *FakeGitHub) AddPullRequest(pr *github.PullRequest) {
 	key := key{
@@ -67,15 +79,9 @@ func (g *FakeGitHub) AddComment(owner string, repo string, pr int64, comment *gi
 }
 
 func (g *FakeGitHub) getPullRequest(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(mux.Vars(r)["number"], 10, 64)
+	key, err := prKey(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	key := key{
-		owner: mux.Vars(r)["owner"],
-		repo:  mux.Vars(r)["repo"],
-		id:    id,
 	}
 
 	pr, ok := g.pr[key]
@@ -91,16 +97,11 @@ func (g *FakeGitHub) getPullRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *FakeGitHub) getComments(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(mux.Vars(r)["number"], 10, 64)
+	key, err := prKey(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
-	key := key{
-		owner: mux.Vars(r)["owner"],
-		repo:  mux.Vars(r)["repo"],
-		id:    id,
-	}
+
 	comments, ok := g.comments[key]
 	if !ok {
 		comments = []*github.IssueComment{}
@@ -112,15 +113,9 @@ func (g *FakeGitHub) getComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *FakeGitHub) createComment(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(mux.Vars(r)["number"], 10, 64)
+	key, err := prKey(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	key := key{
-		owner: mux.Vars(r)["owner"],
-		repo:  mux.Vars(r)["repo"],
-		id:    id,
 	}
 
 	c := new(github.IssueComment)
@@ -139,16 +134,11 @@ func (g *FakeGitHub) createComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *FakeGitHub) updateLabels(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(mux.Vars(r)["number"], 10, 64)
+	key, err := prKey(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
-	key := key{
-		owner: mux.Vars(r)["owner"],
-		repo:  mux.Vars(r)["repo"],
-		id:    id,
-	}
+
 	pr, ok := g.pr[key]
 	if !ok {
 		http.Error(w, "pull request not found", http.StatusNotFound)

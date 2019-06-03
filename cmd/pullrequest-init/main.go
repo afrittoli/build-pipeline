@@ -32,41 +32,6 @@ var (
 	mode  = flag.String("mode", "download", "Whether to operate in download or upload mode")
 )
 
-// PullRequest represents a generic pull request resource.
-type PullRequest struct {
-	Type       string
-	ID         int64
-	Head, Base *GitReference
-	Comments   []*Comment
-	Labels     []*Label
-
-	Raw string
-}
-
-// GitReference represents a git ref object. See
-// https://git-scm.com/book/en/v2/Git-Internals-Git-References for more details.
-type GitReference struct {
-	Repo   string
-	Branch string
-	SHA    string
-}
-
-// Comment represents a pull request comment.
-type Comment struct {
-	Text string
-
-	// Output only.
-
-	Author string
-	ID     int64
-	Raw    string
-}
-
-// Label represents a Pull Request Label
-type Label struct {
-	Text string
-}
-
 func main() {
 	flag.Parse()
 	logger, _ := logging.NewLogger("", "pullrequest-init")

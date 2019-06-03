@@ -39,18 +39,9 @@ func NewGitHubHandler(ctx context.Context, logger *zap.SugaredLogger, rawURL str
 		hc = oauth2.NewClient(ctx, ts)
 	}
 
-	u, err := url.Parse(rawURL)
+	owner, repo, prNumber, err := parseGitHubURL(rawURL)
 	if err != nil {
 		return nil, err
-	}
-	split := strings.Split(u.Path, "/")
-	if len(split) != 5 {
-		return nil, fmt.Errorf("could not determine PR from URL: %v", rawURL)
-	}
-	owner, repo, pr := split[1], split[2], split[4]
-	prNumber, err := strconv.Atoi(pr)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing PR number: %s", pr)
 	}
 
 	return &GitHubHandler{
@@ -60,6 +51,27 @@ func NewGitHubHandler(ctx context.Context, logger *zap.SugaredLogger, rawURL str
 		repo:   repo,
 		prNum:  prNumber,
 	}, nil
+}
+
+// parseURL takes in a raw GitHub URL
+// (e.g. https://github.com/owner/repo/pull/1) and extracts the owner, repo,
+// and pull request number.
+func parseGitHubURL(raw string) (string, string, int, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", "", 0, err
+	}
+	split := strings.Split(u.Path, "/")
+	if len(split) < 5 {
+		return "", "", 0, fmt.Errorf("could not determine PR from URL: %v", raw)
+	}
+	owner, repo, pr := split[1], split[2], split[4]
+	prNumber, err := strconv.Atoi(pr)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("error parsing PR number: %s", pr)
+	}
+
+	return owner, repo, prNumber, nil
 }
 
 // writeJSON writes an arbitrary interface to the given path.
@@ -78,57 +90,74 @@ func (h *GitHubHandler) Download(ctx context.Context, path string) error {
 		return err
 	}
 
-	// Pull request
 	gpr, _, err := h.PullRequests.Get(ctx, h.owner, h.repo, h.prNum)
 	if err != nil {
 		return err
 	}
+	pr := baseGitHubPullRequest(gpr)
+
 	rawPR := filepath.Join(rawPrefix, "pr.json")
 	if err := writeJSON(rawPR, gpr); err != nil {
 		return err
 	}
-	pr := &PullRequest{
-		Type: "github",
-		ID:   gpr.GetID(),
-		Head: &GitReference{
-			Repo:   gpr.GetHead().GetRepo().GetCloneURL(),
-			Branch: gpr.GetHead().GetRef(),
-			SHA:    gpr.GetHead().GetSHA(),
-		},
-		Base: &GitReference{
-			Repo:   gpr.GetBase().GetRepo().GetCloneURL(),
-			Branch: gpr.GetBase().GetRef(),
-			SHA:    gpr.GetBase().GetSHA(),
-		},
+	pr.Raw = rawPR
 
-		Raw: rawPR,
+	// Comments
+	pr.Comments, err = h.downloadComments(ctx, rawPrefix)
+	if err != nil {
+		return err
 	}
 
-	// Labels
-	pr.Labels = make([]*Label, 0, len(gpr.Labels))
-	for _, l := range gpr.Labels {
-		pr.Labels = append(pr.Labels, &Label{
+	prPath := filepath.Join(path, prFile)
+	h.Logger.Infof("Writing pull request to file: %s", prPath)
+	return writeJSON(prPath, pr)
+}
+
+func baseGitHubPullRequest(pr *github.PullRequest) *PullRequest {
+	return &PullRequest{
+		Type: "github",
+		ID:   pr.GetID(),
+		Head: &GitReference{
+			Repo:   pr.GetHead().GetRepo().GetCloneURL(),
+			Branch: pr.GetHead().GetRef(),
+			SHA:    pr.GetHead().GetSHA(),
+		},
+		Base: &GitReference{
+			Repo:   pr.GetBase().GetRepo().GetCloneURL(),
+			Branch: pr.GetBase().GetRef(),
+			SHA:    pr.GetBase().GetSHA(),
+		},
+		Labels: githubLabels(pr),
+	}
+}
+
+func githubLabels(pr *github.PullRequest) []*Label {
+	labels := make([]*Label, 0, len(pr.Labels))
+	for _, l := range pr.Labels {
+		labels = append(labels, &Label{
 			Text: l.GetName(),
 		})
 	}
+	return labels
+}
 
-	// Comments
-	commentsPrefix := filepath.Join(rawPrefix, "comments")
+func (h *GitHubHandler) downloadComments(ctx context.Context, rawPath string) ([]*Comment, error) {
+	commentsPrefix := filepath.Join(rawPath, "comments")
 	for _, p := range []string{commentsPrefix} {
 		if err := os.MkdirAll(p, 0755); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	ic, _, err := h.Issues.ListComments(ctx, h.owner, h.repo, h.prNum, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	pr.Comments = make([]*Comment, 0, len(ic))
+	comments := make([]*Comment, 0, len(ic))
 	for _, c := range ic {
 		rawComment := filepath.Join(commentsPrefix, fmt.Sprintf("%d.json", c.GetID()))
 		h.Logger.Infof("Writing comment %d to file: %s", c.GetID(), rawComment)
 		if err := writeJSON(rawComment, c); err != nil {
-			return err
+			return nil, err
 		}
 
 		comment := &Comment{
@@ -138,12 +167,9 @@ func (h *GitHubHandler) Download(ctx context.Context, path string) error {
 
 			Raw: rawComment,
 		}
-		pr.Comments = append(pr.Comments, comment)
+		comments = append(comments, comment)
 	}
-
-	prPath := filepath.Join(path, prFile)
-	h.Logger.Infof("Writing pull request to file: %s", prPath)
-	return writeJSON(prPath, pr)
+	return comments, nil
 }
 
 // readJSON reads an arbitrary JSON payload from path and decodes it into the
@@ -169,18 +195,30 @@ func (h *GitHubHandler) Upload(ctx context.Context, path string) error {
 		return err
 	}
 
-	labelNames := make([]string, 0, len(pr.Labels))
-	for _, l := range pr.Labels {
-		labelNames = append(labelNames, l.Text)
-	}
-	h.Logger.Infof("Setting labels for PR %d to %v", h.prNum, labelNames)
-	if _, _, err := h.Issues.ReplaceLabelsForIssue(ctx, h.owner, h.repo, h.prNum, labelNames); err != nil {
+	if err := h.uploadLabels(ctx, pr.Labels); err != nil {
 		return err
 	}
 
-	// Now sync comments.
+	if err := h.uploadComments(ctx, pr.Comments); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *GitHubHandler) uploadLabels(ctx context.Context, labels []*Label) error {
+	labelNames := make([]string, 0, len(labels))
+	for _, l := range labels {
+		labelNames = append(labelNames, l.Text)
+	}
+	h.Logger.Infof("Setting labels for PR %d to %v", h.prNum, labelNames)
+	_, _, err := h.Issues.ReplaceLabelsForIssue(ctx, h.owner, h.repo, h.prNum, labelNames)
+	return err
+}
+
+func (h *GitHubHandler) uploadComments(ctx context.Context, comments []*Comment) error {
 	desiredComments := map[int64]*Comment{}
-	for _, c := range pr.Comments {
+	for _, c := range comments {
 		desiredComments[c.ID] = c
 	}
 	h.Logger.Infof("Setting comments for PR %d to: %v", h.prNum, desiredComments)
@@ -199,7 +237,7 @@ func (h *GitHubHandler) Upload(ctx context.Context, path string) error {
 				return err
 			}
 		} else if dc.Text != ec.GetBody() {
-			//Update
+			// Update
 			newComment := github.IssueComment{
 				Body: github.String(dc.Text),
 				User: ec.User,
@@ -222,6 +260,5 @@ func (h *GitHubHandler) Upload(ctx context.Context, path string) error {
 			return err
 		}
 	}
-
 	return nil
 }

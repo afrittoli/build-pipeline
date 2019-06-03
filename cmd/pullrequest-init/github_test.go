@@ -15,6 +15,52 @@ import (
 	"go.uber.org/zap"
 )
 
+func TestGitHubParseURL(t *testing.T) {
+	wantOwner := "owner"
+	wantRepo := "repo"
+	wantPR := 1
+
+	for _, url := range []string{
+		"https://github.com/owner/repo/pulls/1",
+		"https://github.com/owner/repo/pulls/1/",
+		"https://github.com/owner/repo/pulls/1/files",
+		"http://github.com/owner/repo/pulls/1",
+		"ssh://github.com/owner/repo/pulls/1",
+		"https://example.com/owner/repo/pulls/1",
+		"https://github.com/owner/repo/foo/1",
+	} {
+		t.Run(url, func(t *testing.T) {
+			owner, repo, pr, err := parseGitHubURL(url)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if owner != wantOwner {
+				t.Errorf("Owner: %s, want: %s", owner, wantOwner)
+			}
+			if repo != wantRepo {
+				t.Errorf("Repo: %s, want: %s", repo, wantRepo)
+			}
+			if pr != wantPR {
+				t.Errorf("PR Number: %d, want: %d", pr, wantPR)
+			}
+		})
+	}
+}
+
+func TestGitHubParseURL_errors(t *testing.T) {
+	for _, url := range []string{
+		"",
+		"https://github.com/owner/repo",
+		"https://github.com/owner/repo/pulls/foo",
+	} {
+		t.Run(url, func(t *testing.T) {
+			if o, r, pr, err := parseGitHubURL(url); err == nil {
+				t.Errorf("Expected error, got (%s, %s, %d)", o, r, pr)
+			}
+		})
+	}
+}
+
 func newClient(gh *FakeGitHub) (*github.Client, func()) {
 	s := httptest.NewServer(gh)
 	client := github.NewClient(s.Client())
