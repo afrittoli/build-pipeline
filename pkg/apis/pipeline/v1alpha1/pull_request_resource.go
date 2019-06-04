@@ -1,5 +1,5 @@
 /*
-Copyright 2018 The Knative Authors.
+Copyright 2019 The Tekton Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,8 +25,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	prSource       = "pr-source"
+	githubTokenEnv = "githubToken"
+)
+
 var (
-	prSource = "pr-source"
 	// The container that we use to implement the PR source step.
 	prImage = flag.String("pr-image", "override-with-pr:latest",
 		"The container image containing our PR binary.")
@@ -35,11 +39,14 @@ var (
 // PullRequestResource is an endpoint from which to get data which is required
 // by a Build/Task for context.
 type PullRequestResource struct {
-	Name             string               `json:"name"`
-	Type             PipelineResourceType `json:"type"`
-	URL              string               `json:"url"`
-	GithubOauthToken string               `json:"githubOauthToken"`
-	//Secrets holds a struct to indicate a field name and corresponding secret name to populate it
+	Name string               `json:"name"`
+	Type PipelineResourceType `json:"type"`
+
+	DestinationDir string `json:"destinationDir"`
+	// GitHub URL pointing to the pull request.
+	// Example: https://github.com/owner/repo/pulls/1
+	URL string `json:"url"`
+	// Secrets holds a struct to indicate a field name and corresponding secret name to populate it.
 	Secrets []SecretParam `json:"secrets"`
 }
 
@@ -91,45 +98,20 @@ func (s *PullRequestResource) Replacements() map[string]string {
 }
 
 func (s *PullRequestResource) GetDownloadContainerSpec() ([]corev1.Container, error) {
-	args := []string{"-url", s.URL, "-path", s.Name, "-mode", "download"}
-
-	evs := []corev1.EnvVar{}
-	for _, sec := range s.Secrets {
-		switch {
-		case strings.EqualFold(sec.FieldName, "githubOauthToken"):
-			fmt.Println("ADDING ENV VAR")
-			ev := corev1.EnvVar{
-				Name: strings.ToUpper(sec.FieldName),
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: sec.SecretName,
-						},
-						Key: sec.SecretKey,
-					},
-				},
-			}
-			evs = append(evs, ev)
-		}
-	}
-
-	return []corev1.Container{{
-		Name:       names.SimpleNameGenerator.RestrictLengthWithRandomSuffix(prSource + "-" + s.Name),
-		Image:      *prImage,
-		Command:    []string{"/ko-app/pullrequest-init"},
-		Args:       args,
-		WorkingDir: workspaceDir,
-		Env:        evs,
-	}}, nil
+	return s.getContainerSpec("download")
 }
 
 func (s *PullRequestResource) GetUploadContainerSpec() ([]corev1.Container, error) {
-	args := []string{"-url", s.URL, "-path", s.Name, "-mode", "upload"}
+	return s.getContainerSpec("upload")
+}
+
+func (s *PullRequestResource) getContainerSpec(mode string) ([]corev1.Container, error) {
+	args := []string{"-url", s.URL, "-path", s.DestinationDir, "-mode", mode}
 
 	evs := []corev1.EnvVar{}
 	for _, sec := range s.Secrets {
 		switch {
-		case strings.EqualFold(sec.FieldName, "githubOauthToken"):
+		case strings.EqualFold(sec.FieldName, githubTokenEnv):
 			ev := corev1.EnvVar{
 				Name: strings.ToUpper(sec.FieldName),
 				ValueFrom: &corev1.EnvVarSource{
@@ -156,4 +138,6 @@ func (s *PullRequestResource) GetUploadContainerSpec() ([]corev1.Container, erro
 }
 
 // SetDestinationDirectory sets the destination directory at runtime like where is the resource going to be copied to
-func (s *PullRequestResource) SetDestinationDirectory(destDir string) {}
+func (s *PullRequestResource) SetDestinationDirectory(dir string) {
+	s.DestinationDir = dir
+}

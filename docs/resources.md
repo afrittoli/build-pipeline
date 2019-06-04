@@ -7,36 +7,37 @@ A `Task` can have multiple inputs and outputs.
 
 For example:
 
-- A `Task`'s input could be a GitHub source which contains your application
-  code.
-- A `Task`'s output can be your application container image which can be then
-  deployed in a cluster.
-- A `Task`'s output can be a jar file to be uploaded to a storage bucket.
+-   A `Task`'s input could be a GitHub source which contains your application
+    code.
+-   A `Task`'s output can be your application container image which can be then
+    deployed in a cluster.
+-   A `Task`'s output can be a jar file to be uploaded to a storage bucket.
 
----
+--------------------------------------------------------------------------------
 
-- [Syntax](#syntax)
-- [Resource types](#resource-types)
-- [Examples](#examples)
+-   [Syntax](#syntax)
+-   [Resource types](#resource-types)
+-   [Examples](#examples)
 
 ## Syntax
 
 To define a configuration file for a `PipelineResource`, you can specify the
 following fields:
 
-- Required:
-  - [`apiVersion`][kubernetes-overview] - Specifies the API version, for example
-    `tekton.dev/v1alpha1`.
-  - [`kind`][kubernetes-overview] - Specify the `PipelineResource` resource
-    object.
-  - [`metadata`][kubernetes-overview] - Specifies data to uniquely identify the
-    `PipelineResource` object, for example a `name`.
-  - [`spec`][kubernetes-overview] - Specifies the configuration information for
-    your `PipelineResource` resource object.
-    - [`type`](#resource-types) - Specifies the `type` of the `PipelineResource`
-- Optional:
-  - [`params`](#resource-types) - Parameters which are specific to each type of
-    `PipelineResource`
+-   Required:
+    -   [`apiVersion`][kubernetes-overview] - Specifies the API version, for
+        example `tekton.dev/v1alpha1`.
+    -   [`kind`][kubernetes-overview] - Specify the `PipelineResource` resource
+        object.
+    -   [`metadata`][kubernetes-overview] - Specifies data to uniquely identify
+        the `PipelineResource` object, for example a `name`.
+    -   [`spec`][kubernetes-overview] - Specifies the configuration information
+        for your `PipelineResource` resource object.
+    -   [`type`](#resource-types) - Specifies the `type` of the
+        `PipelineResource`
+-   Optional:
+    -   [`params`](#resource-types) - Parameters which are specific to each type
+        of `PipelineResource`
 
 [kubernetes-overview]:
   https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#required-fields
@@ -45,12 +46,12 @@ following fields:
 
 The following `PipelineResources` are currently supported:
 
-- [Git Resource](#git-resource)
-- [Image Resource](#image-resource)
-- [Cluster Resource](#cluster-resource)
-- [Storage Resource](#storage-resource)
-  - [GCS Storage Resource](#gcs-storage-resource)
-  - [BuildGCS Storage Resource](#buildgcs-storage-resource)
+-   [Git Resource](#git-resource)
+-   [Image Resource](#image-resource)
+-   [Cluster Resource](#cluster-resource)
+-   [Storage Resource](#storage-resource)
+    -   [GCS Storage Resource](#gcs-storage-resource)
+    -   [BuildGCS Storage Resource](#buildgcs-storage-resource)
 
 ### Git Resource
 
@@ -78,13 +79,13 @@ spec:
 
 Params that can be added are the following:
 
-1. `url`: represents the location of the git repository, you can use this to
-   change the repo, e.g. [to use a fork](#using-a-fork)
-1. `revision`: Git
-   [revision](https://git-scm.com/docs/gitrevisions#_specifying_revisions)
-   (branch, tag, commit SHA or ref) to clone. You can use this to control what
-   commit [or branch](#using-a-branch) is used. _If no revision is specified,
-   the resource will default to `latest` from `master`._
+1.  `url`: represents the location of the git repository, you can use this to
+    change the repo, e.g. [to use a fork](#using-a-fork)
+1.  `revision`: Git
+    [revision](https://git-scm.com/docs/gitrevisions#_specifying_revisions)
+    (branch, tag, commit SHA or ref) to clone. You can use this to control what
+    commit [or branch](#using-a-branch) is used. _If no revision is specified,
+    the resource will default to `latest` from `master`._
 
 #### Using a fork
 
@@ -129,6 +130,52 @@ spec:
       value: refs/pull/52525/head
 ```
 
+### Pull Request Resource
+
+Pull Request resource represents a pull request event from a source control
+system.
+
+Adding the Pull Request resource as an input to a Task will populate the
+workspace with a JSON payload containing generic pull request related metadata
+such as base/head commit, comments, and labels. The payloads will also contain
+links to raw service-specific payloads where appropriate.
+
+Adding the Pull Request resource as an output of a Task will update the source
+control system with any changes made to the pull request resource during the
+pipeline.
+
+See [types.go](cmd/pullrequest-init/types.go) for the full payload spec.
+
+To create a pull request resource using the `PipelineResource` CRD:
+
+```yaml
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: wizzbang-pr
+  namespace: default
+spec:
+  type: pullRequest
+  params:
+    - name: url
+      value: https://github.com/wizzbangcorp/wizzbang/pulls/1
+  secrets:
+    - fieldName: githubToken
+      secretName: github-secrets
+      secretKey: token
+```
+
+Params that can be added are the following:
+
+1.  `url`: represents the location of the pull request to fetch.
+
+#### GitHub
+
+The Pull Request resource will look for GitHub OAuth authentication tokens in
+spec secrets with a field name called `githubToken`.
+
+URLs should be of the form: https://github.com/tektoncd/pipelines/pulls/1
+
 ### Image Resource
 
 An Image resource represents an image that lives in a remote repository. It is
@@ -138,14 +185,14 @@ registry.
 
 Params that can be added are the following:
 
-1. `url`: The complete path to the image, including the registry and the image
-   tag
-1. `digest`: The
-   [image digest](https://success.docker.com/article/images-tagging-vs-digests)
-   which uniquely identifies a particular build of an image with a particular
-   tag. _While this can be provided as a parameter, there is not yet a way to
-   update this value after an image is built, but this is planned in
-   [#216](https://github.com/tektoncd/pipeline/issues/216)._
+1.  `url`: The complete path to the image, including the registry and the image
+    tag
+1.  `digest`: The
+    [image digest](https://success.docker.com/article/images-tagging-vs-digests)
+    which uniquely identifies a particular build of an image with a particular
+    tag. _While this can be provided as a parameter, there is not yet a way to
+    update this value after an image is built, but this is planned in
+    [#216](https://github.com/tektoncd/pipeline/issues/216)._
 
 For example:
 
@@ -230,17 +277,17 @@ cluster. The kubeconfig will be placed in
 
 The Cluster resource has the following parameters:
 
-- `name` (required): The name to be given to the target cluster, will be used in
-  the kubeconfig and also as part of the path to the kubeconfig file
-- `url` (required): Host url of the master node
-- `username` (required): the user with access to the cluster
-- `password`: to be used for clusters with basic auth
-- `token`: to be used for authentication, if present will be used ahead of the
-  password
-- `insecure`: to indicate server should be accessed without verifying the TLS
-  certificate.
-- `cadata` (required): holds PEM-encoded bytes (typically read from a root
-  certificates bundle).
+-   `name` (required): The name to be given to the target cluster, will be used
+    in the kubeconfig and also as part of the path to the kubeconfig file
+-   `url` (required): Host url of the master node
+-   `username` (required): the user with access to the cluster
+-   `password`: to be used for clusters with basic auth
+-   `token`: to be used for authentication, if present will be used ahead of the
+    password
+-   `insecure`: to indicate server should be accessed without verifying the TLS
+    certificate.
+-   `cadata` (required): holds PEM-encoded bytes (typically read from a root
+    certificates bundle).
 
 Note: Since only one authentication technique is allowed per user, either a
 `token` or a `password` should be provided, if both are provided, the `password`
@@ -369,18 +416,18 @@ spec:
 
 Params that can be added are the following:
 
-1. `location`: represents the location of the blob storage.
-1. `type`: represents the type of blob storage. For GCS storage resource this
-   value should be set to `gcs`.
-1. `dir`: represents whether the blob storage is a directory or not. By default
-   storage artifact is considered not a directory.
+1.  `location`: represents the location of the blob storage.
+1.  `type`: represents the type of blob storage. For GCS storage resource this
+    value should be set to `gcs`.
+1.  `dir`: represents whether the blob storage is a directory or not. By default
+    storage artifact is considered not a directory.
 
-   - If artifact is a directory then `-r`(recursive) flag is used to copy all
-     files under source directory to GCS bucket. Eg:
-     `gsutil cp -r source_dir/* gs://some-bucket`
-   - If artifact is a single file like zip, tar files then copy will be only 1
-     level deep(no recursive). It will not trigger copy of sub directories in
-     source directory. Eg: `gsutil cp source.tar gs://some-bucket.tar`.
+    -   If artifact is a directory then `-r`(recursive) flag is used to copy all
+        files under source directory to GCS bucket. Eg: `gsutil cp -r
+        source_dir/* gs://some-bucket`
+    -   If artifact is a single file like zip, tar files then copy will be only
+        1 level deep(no recursive). It will not trigger copy of sub directories
+        in source directory. Eg: `gsutil cp source.tar gs://some-bucket.tar`.
 
 Private buckets can also be configured as storage resources. To access GCS
 private buckets, service accounts are required with correct permissions. The
@@ -388,43 +435,43 @@ private buckets, service accounts are required with correct permissions. The
 information. Below is an example on how to create a storage resource with
 service account.
 
-1. Refer to
-   [official documentation](https://cloud.google.com/compute/docs/access/service-accounts)
-   on how to create service accounts and configuring IAM permissions to access
-   bucket.
-1. Create a Kubernetes secret from downloaded service account json key
+1.  Refer to
+    [official documentation](https://cloud.google.com/compute/docs/access/service-accounts)
+    on how to create service accounts and configuring IAM permissions to access
+    bucket.
+1.  Create a Kubernetes secret from downloaded service account json key
 
-   ```bash
-   kubectl create secret generic bucket-sa --from-file=./service_account.json
-   ```
+    ```bash
+    kubectl create secret generic bucket-sa --from-file=./service_account.json
+    ```
 
-1. To access GCS private bucket environment variable
-   [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/production)
-   should be set so apply above created secret to the GCS storage resource under
-   `fieldName` key.
+1.  To access GCS private bucket environment variable
+    [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/production)
+    should be set so apply above created secret to the GCS storage resource
+    under `fieldName` key.
 
-   ```yaml
-   apiVersion: tekton.dev/v1alpha1
-   kind: PipelineResource
-   metadata:
-     name: wizzbang-storage
-     namespace: default
-   spec:
-     type: storage
-     params:
-       - name: type
-         value: gcs
-       - name: location
-         value: gs://some-private-bucket
-       - name: dir
-         value: "y"
-     secrets:
-       - fieldName: GOOGLE_APPLICATION_CREDENTIALS
-         secretName: bucket-sa
-         secretKey: service_account.json
-   ```
+    ```yaml
+    apiVersion: tekton.dev/v1alpha1
+    kind: PipelineResource
+    metadata:
+      name: wizzbang-storage
+      namespace: default
+    spec:
+      type: storage
+      params:
+        - name: type
+          value: gcs
+        - name: location
+          value: gs://some-private-bucket
+        - name: dir
+          value: "y"
+      secrets:
+        - fieldName: GOOGLE_APPLICATION_CREDENTIALS
+          secretName: bucket-sa
+          secretKey: service_account.json
+    ```
 
----
+--------------------------------------------------------------------------------
 
 #### BuildGCS Storage Resource
 
@@ -463,24 +510,24 @@ spec:
 
 Params that can be added are the following:
 
-1. `location`: represents the location of the blob storage.
-1. `type`: represents the type of blob storage. For BuildGCS, this value should
-   be set to `build-gcs`
-1. `artifactType`: represent the type of GCS resource. Right now, we support
-   following types:
+1.  `location`: represents the location of the blob storage.
+1.  `type`: represents the type of blob storage. For BuildGCS, this value should
+    be set to `build-gcs`
+1.  `artifactType`: represent the type of GCS resource. Right now, we support
+    following types:
 
-   - `Archive`:
-     - Archive indicates that resource fetched is an archive file. Currently,
-       Build GCS resource only supports `.zip` archive.
-     - It unzips the archive and places all the files in the directory which is
-       set at runtime.
-     - If `artifactType` is set to `Archive`, `location` should point to a
-       `.zip` file.
-   - [`Manifest`](https://github.com/GoogleCloudPlatform/cloud-builders/tree/master/gcs-fetcher#source-manifests):
-     - Manifest indicates that resource should be fetched using a source
-       manifest file.
-     - If `artifactType` is set to `Manifest`, `location` should point to a
-       source manifest file.
+    -   `Archive`:
+        -   Archive indicates that resource fetched is an archive file.
+            Currently, Build GCS resource only supports `.zip` archive.
+        -   It unzips the archive and places all the files in the directory
+            which is set at runtime.
+        -   If `artifactType` is set to `Archive`, `location` should point to a
+            `.zip` file.
+    -   [`Manifest`](https://github.com/GoogleCloudPlatform/cloud-builders/tree/master/gcs-fetcher#source-manifests):
+        -   Manifest indicates that resource should be fetched using a source
+            manifest file.
+        -   If `artifactType` is set to `Manifest`, `location` should point to a
+            source manifest file.
 
 Private buckets other than ones accessible by
 [TaskRun Service Account](./taskruns.md#service-account) can not be configured

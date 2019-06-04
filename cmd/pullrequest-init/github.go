@@ -30,7 +30,7 @@ type GitHubHandler struct {
 // NewGitHubHandler initializes a new handler for interacting with GitHub
 // resources.
 func NewGitHubHandler(ctx context.Context, logger *zap.SugaredLogger, rawURL string) (*GitHubHandler, error) {
-	token := strings.TrimSpace(os.Getenv("GITHUBOAUTHTOKEN"))
+	token := strings.TrimSpace(os.Getenv("GITHUBTOKEN"))
 	var hc *http.Client
 	if token != "" {
 		ts := oauth2.StaticTokenSource(
