@@ -61,28 +61,14 @@ func TestGitHubParseURL_errors(t *testing.T) {
 	}
 }
 
-func newClient(gh *FakeGitHub) (*github.Client, func()) {
-	s := httptest.NewServer(gh)
-	client := github.NewClient(s.Client())
-	u, err := url.Parse(fmt.Sprintf("%s/", s.URL))
-	if err != nil {
-		panic(err)
-	}
-	client.BaseURL = u
-	return client, s.Close
-}
+const (
+	owner = "foo"
+	repo  = "bar"
+	prNum = 1
+)
 
-func TestGitHub(t *testing.T) {
-	ctx := context.Background()
-	gh := NewFakeGitHub()
-	client, close := newClient(gh)
-	defer close()
-
-	owner := "foo"
-	repo := "bar"
-	prNum := 1
-
-	pr := &github.PullRequest{
+var (
+	pr = &github.PullRequest{
 		ID:      github.Int64(int64(prNum)),
 		HTMLURL: github.String(fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, prNum)),
 		Base: &github.PullRequestBranch{
@@ -108,19 +94,41 @@ func TestGitHub(t *testing.T) {
 			SHA: github.String("2"),
 		},
 	}
-	gh.AddPullRequest(pr)
-	comment := &github.IssueComment{
+	comment = &github.IssueComment{
 		ID:   github.Int64(1),
 		Body: github.String("hello world!"),
 	}
+)
+
+func newHandler(ctx context.Context, t *testing.T, gh *FakeGitHub) (*GitHubHandler, func()) {
+	t.Helper()
+
+	s := httptest.NewServer(gh)
+	client := github.NewClient(s.Client())
+	u, err := url.Parse(fmt.Sprintf("%s/", s.URL))
+	if err != nil {
+		t.Fatalf("error parsing HTTP test server URL: %v", err)
+	}
+	client.BaseURL = u
+
+	// Automatically prepopulate GitHub server to ease test setup.
+	gh.AddPullRequest(pr)
 	gh.AddComment(owner, repo, int64(prNum), comment)
 
 	h, err := NewGitHubHandler(ctx, zap.NewNop().Sugar(), pr.GetHTMLURL())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("error creating GitHubHandler: %v", err)
 	}
 	// Override GitHub client to point to local test server.
 	h.Client = client
+	return h, s.Close
+}
+
+func TestGitHub(t *testing.T) {
+	ctx := context.Background()
+	gh := NewFakeGitHub()
+	h, close := newHandler(ctx, t, gh)
+	defer close()
 
 	dir := os.TempDir()
 	if err := h.Download(ctx, dir); err != nil {
@@ -164,47 +172,74 @@ func TestGitHub(t *testing.T) {
 	if rawCommentPath != gotPR.Comments[0].Raw {
 		t.Errorf("Raw PR path: want [%s], got [%s]", rawCommentPath, gotPR.Comments[0].Raw)
 	}
+}
 
-	// Upload
+func TestUpload(t *testing.T) {
+	ctx := context.Background()
+	gh := NewFakeGitHub()
+	h, close := newHandler(ctx, t, gh)
+	defer close()
 
-	// Update labels
-	gotPR.Labels = []*Label{{
-		Text: "tacocat",
-	}}
-	gotPR.Comments = append(gotPR.Comments, &Comment{
-		Text: "abc123",
-	})
+	tektonPR := &PullRequest{
+		Type: "github",
+		ID:   int64(prNum),
+		Head: &GitReference{
+			Repo:   pr.GetHead().GetRepo().GetCloneURL(),
+			Branch: pr.GetHead().GetRef(),
+			SHA:    pr.GetHead().GetSHA(),
+		},
+		Base: &GitReference{
+			Repo:   pr.GetBase().GetRepo().GetCloneURL(),
+			Branch: pr.GetBase().GetRef(),
+			SHA:    pr.GetBase().GetSHA(),
+		},
+		Comments: []*Comment{{
+			ID:     comment.GetID(),
+			Author: comment.GetUser().GetLogin(),
+			Text:   comment.GetBody(),
+		}, {
+			Text: "abc123",
+		}},
+		Labels: []*Label{{
+			Text: "tacocat",
+		}},
+	}
+	dir := os.TempDir()
+	prPath := filepath.Join(dir, "pr.json")
 	f, err := os.Create(prPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.NewEncoder(f).Encode(gotPR); err != nil {
+	if err := json.NewEncoder(f).Encode(tektonPR); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := h.Upload(ctx, dir); err != nil {
 		t.Fatal(err)
 	}
-	ghPR, _, err := client.PullRequests.Get(ctx, owner, repo, prNum)
+
+	wantPR := *pr
+	wantPR.Labels = []*github.Label{{
+		Name: github.String(tektonPR.Labels[0].Text),
+	}}
+	gotPR, _, err := h.Client.PullRequests.Get(ctx, owner, repo, prNum)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pr.Labels = []*github.Label{{
-		Name: github.String(gotPR.Labels[0].Text),
-	}}
-	if diff := cmp.Diff(pr, ghPR); diff != "" {
-		t.Errorf("Upload PR diff: %s", diff)
+	if diff := cmp.Diff(&wantPR, gotPR); diff != "" {
+		t.Errorf("Upload PR -want +got: %s", diff)
 	}
 
-	ghComments, _, err := client.Issues.ListComments(ctx, owner, repo, prNum, nil)
+	ghComments, _, err := h.Client.Issues.ListComments(ctx, owner, repo, prNum, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantComments := []*github.IssueComment{comment, &github.IssueComment{
 		ID:   github.Int64(2),
-		Body: github.String(gotPR.Comments[1].Text),
+		Body: github.String(tektonPR.Comments[1].Text),
 	}}
 	if diff := cmp.Diff(wantComments, ghComments); diff != "" {
-		t.Errorf("Upload comment diff: %s", diff)
+		t.Errorf("Upload comment -want +got: %s", diff)
 	}
 
 }
@@ -219,6 +254,6 @@ func diffFile(t *testing.T, path string, want interface{}, got interface{}) {
 		t.Fatal(err)
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("PR Diff: %s", diff)
+		t.Errorf("PR -want +got: %s", diff)
 	}
 }
