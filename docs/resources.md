@@ -144,6 +144,55 @@ Adding the Pull Request resource as an output of a Task will update the source
 control system with any changes made to the pull request resource during the
 pipeline.
 
+Example payload:
+
+```json
+{
+  "Base": {
+    "Branch": "master",
+    "Repo": "https://github.com/tektoncd/pipeline.git",
+    "SHA": "75909bc18922c65141b6308d36e11bf4fae01a7c"
+  },
+  "Comments": [
+    {
+      "Author": "googlebot",
+      "ID": 494863557,
+      "Raw": "/tmp/pr/github/comments/494863557.json",
+      "Text": "So there's good news and bad news.\n\n:thumbsup: The good news is that everyone that needs to sign a CLA (the pull request submitter and all commit authors) have done so. Everything is all good there.\n\n:confused: The bad news is that it appears that one or more commits were authored or co-authored by someone other than the pull request submitter. We need to confirm that all authors are ok with their commits being contributed to this project. Please have them confirm that here in the pull request.\n\n*Note to project maintainer: This is a terminal state, meaning the `cla/google` commit status will not change from this state. It's up to you to confirm consent of all the commit author(s), set the `cla` label to `yes` (if enabled on your project), and then merge this pull request when appropriate.*\n\n\u2139\ufe0f **Googlers: [Go here](https://goto.google.com/prinfo/https%3A%2F%2Fgithub.com%2Ftektoncd%2Fpipeline%2Fpull%2F895) for more info**.\n\n<!-- need_author_consent -->"
+    },
+    {
+      "Author": "wlynch",
+      "ID": 494863879,
+      "Raw": "/tmp/pr/github/comments/494863879.json",
+      "Text": "/assign @dlorenc "
+    },
+    {
+      "Author": "tekton-robot",
+      "ID": 494864767,
+      "Raw": "/tmp/pr/github/comments/494864767.json",
+      "Text": "[APPROVALNOTIFIER] This PR is **NOT APPROVED**\n\nThis pull-request has been approved by: *<a href=\"https://github.com/tektoncd/pipeline/pull/895#\" title=\"Author self-approved\">wlynch</a>*\nTo fully approve this pull request, please assign additional approvers.\nWe suggest the following additional approver: **dlorenc**\n\nIf they are not already assigned, you can assign the PR to them by writing `/assign @dlorenc` in a comment when ready.\n\nThe full list of commands accepted by this bot can be found [here](https://go.k8s.io/bot-commands).\n\nThe pull request process is described [here](https://git.k8s.io/community/contributors/guide/owners.md#the-code-review-process)\n\n<details open>\nNeeds approval from an approver in each of these files:\n\n- **[OWNERS](https://github.com/tektoncd/pipeline/blob/master/OWNERS)**\n\nApprovers can indicate their approval by writing `/approve` in a comment\nApprovers can cancel approval by writing `/approve cancel` in a comment\n</details>\n<!-- META={\"approvers\":[\"dlorenc\"]} -->"
+    },
+    ...
+  },
+  "Head": {
+    "Branch": "pr",
+    "Repo": "https://github.com/wlynch/pipeline.git",
+    "SHA": "cbe1d606ac2276feb8a17d285c4a6581a031beb3"
+  },
+  "ID": 281259176,
+  "Labels": [
+    {
+      "Text": "cla: no"
+    },
+    {
+      "Text": "size/XXL"
+    }
+  ],
+  "Raw": "/tmp/pr/github/pr.json",
+  "Type": "github"
+}
+```
+
 See [types.go](cmd/pullrequest-init/types.go) for the full payload spec.
 
 To create a pull request resource using the `PipelineResource` CRD:
