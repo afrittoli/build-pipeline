@@ -1,0 +1,59 @@
+---
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: to-event-display
+spec:
+  type: cloudevent
+  params:
+  - name: targetURI
+    value: http://cloud-event.sink
+---
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: rules-branch
+spec:
+  type: git
+  params:
+  - name: revision
+    value: master
+  - name: url
+    value: https://github.com/bazelbuild/rules_docker
+---
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: dump-workspace-task
+spec:
+  inputs:
+    resources:
+      - name: workspace
+        type: git
+  outputs:
+    resources:
+      - name: notification
+        type: cloudevent
+  steps:
+  - name: list
+    image: ubuntu
+    command: ["/bin/bash"]
+    args: ['-c', 'ls -al /workspace'] # tests build-gcs resource
+---
+apiVersion: tekton.dev/v1alpha1
+kind: TaskRun
+metadata:
+  name: dump-workspace
+spec:
+  inputs:
+    resources:
+    - name: workspace
+      resourceRef:
+        name: rules-branch
+  outputs:
+    resources:
+    - name: notification
+      resourceRef:
+        name: to-event-display
+  taskRef:
+    name: dump-workspace-task

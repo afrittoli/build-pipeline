@@ -304,6 +304,23 @@ func (c *Reconciler) reconcile(ctx context.Context, tr *v1alpha1.TaskRun) error 
 		return nil
 	}
 
+	// Initialize the cloud events if at least a CloudEventResource is defined
+	// and they have not been initialized yet.
+	c.Logger.Infof("Cloud Events: %s", tr.Status.CloudEvents)
+	// FIXME(afrittoli) If there are no events this is run every time
+	if len(tr.Status.CloudEvents) == 0 {
+		targets := make([]string, len(rtr.Outputs))
+		idx := 0
+		for _, output := range rtr.Outputs {
+			if output.Spec.Type == v1alpha1.PipelineResourceTypeCloudEvent {
+				cer, _ := v1alpha1.NewCloudEventResource(output)
+				targets[idx] = cer.TargetURI
+				idx++
+			}
+		}
+		tr.Status.InitializeCloudEvents(targets)
+	}
+
 	// Get the TaskRun's Pod if it should have one. Otherwise, create the Pod.
 	pod, err := resources.TryGetPod(tr.Status, c.KubeClientSet.CoreV1().Pods(tr.Namespace).Get)
 	if err != nil {
@@ -334,6 +351,32 @@ func (c *Reconciler) reconcile(ctx context.Context, tr *v1alpha1.TaskRun) error 
 	after := tr.Status.GetCondition(apis.ConditionSucceeded)
 
 	reconciler.EmitEvent(c.Recorder, before, after, tr)
+	if after.Status != corev1.ConditionUnknown {
+		// The TaskRun is complete. Time to send cloud events (if any).
+		sendErrors := 0
+		for idx, cloudEventDelivery := range tr.Status.CloudEvents {
+			eventStatus := &(tr.Status.CloudEvents[idx].Status)
+			// Skip events that have already been sent successfully
+			if eventStatus.Condition == v1alpha1.CloudEventConditionSent {
+				continue
+			}
+			err := resources.SendTaskRunCloudEvent(cloudEventDelivery.Target, tr, c.Logger)
+			eventStatus.SentAt = &metav1.Time{Time: time.Now()}
+			eventStatus.RetryCount = eventStatus.RetryCount + 1
+			if err != nil {
+				eventStatus.Condition = v1alpha1.CloudEventConditionFailed
+				eventStatus.Error = err.Error()
+				sendErrors++
+			} else {
+				eventStatus.Condition = v1alpha1.CloudEventConditionSent
+			}
+		}
+		if sendErrors > 0 {
+			c.Logger.Errorf("Failed to send %d cloud events", sendErrors)
+			// Return the latest send error
+			return err
+		}
+	}
 
 	c.Logger.Infof("Successfully reconciled taskrun %s/%s with status: %#v", tr.Name, tr.Namespace, after)
 
