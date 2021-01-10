@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -158,6 +159,14 @@ func setTaskRunStatusBasedOnStepStatus(logger *zap.SugaredLogger, stepStatuses [
 					logger.Errorf("error setting the start time of step %q in taskrun %q: %v", s.Name, tr.Name, err)
 					merr = multierror.Append(merr, err)
 				}
+				exitCodeResult, err := extractExitCodeFromResults(results, s.Name)
+				if err != nil {
+					logger.Errorf("error extracting the exit code of step %q in taskrun %q: %v", s.Name, tr.Name, err)
+					merr = multierror.Append(merr, err)
+				}
+				if exitCodeResult != nil {
+					trs.TaskRunResults = append(trs.TaskRunResults, *exitCodeResult)
+				}
 				taskResults, pipelineResourceResults, filteredResults := filterResultsAndResources(results)
 				if tr.IsSuccessful() {
 					trs.TaskRunResults = append(trs.TaskRunResults, taskResults...)
@@ -267,6 +276,24 @@ func extractStartedAtTimeFromResults(results []v1beta1.PipelineResourceResult) (
 		}
 	}
 	return nil, nil
+}
+func extractExitCodeFromResults(results []v1beta1.PipelineResourceResult, stepName string) (*v1beta1.TaskRunResult, error) {
+	exitCodeResult := v1beta1.TaskRunResult{
+		Name: fmt.Sprintf("tekton.dev.exitcode.%v", stepName),
+	}
+	for _, result := range results {
+		if result.Key == "ExitCode" {
+			// We could just pass the string through but this provides extra validation
+			_, err := strconv.Atoi(result.Value)
+			if err != nil {
+				return nil, fmt.Errorf("could not parse int value %q in ExitCode field: %w", result.Value, err)
+			}
+			exitCodeResult.Value = result.Value
+			return &exitCodeResult, nil
+		}
+	}
+	exitCodeResult.Value = "0"
+	return &exitCodeResult, nil
 }
 
 func updateCompletedTaskRunStatus(logger *zap.SugaredLogger, trs *v1beta1.TaskRunStatus, pod *corev1.Pod) {

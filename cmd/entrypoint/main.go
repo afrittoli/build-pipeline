@@ -131,9 +131,10 @@ func main() {
 			// in both cases has an ExitStatus() method with the
 			// same signature.
 			if status, ok := t.Sys().(syscall.WaitStatus); ok {
-				os.Exit(status.ExitStatus())
+				// os.Exit(status.ExitStatus())
+				log.Printf("Captured non-zero exit code executing command (ExitError): %v", status.ExitStatus())
 			}
-			log.Fatalf("Error executing command (ExitError): %v", err)
+			// log.Fatalf("Error executing command (ExitError): %v", err)
 		default:
 			log.Fatalf("Error executing command: %v", err)
 		}
