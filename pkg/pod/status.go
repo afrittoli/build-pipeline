@@ -292,8 +292,7 @@ func extractExitCodeFromResults(results []v1beta1.PipelineResourceResult, stepNa
 			return &exitCodeResult, nil
 		}
 	}
-	exitCodeResult.Value = "0"
-	return &exitCodeResult, nil
+	return nil, nil
 }
 
 func updateCompletedTaskRunStatus(logger *zap.SugaredLogger, trs *v1beta1.TaskRunStatus, pod *corev1.Pod) {

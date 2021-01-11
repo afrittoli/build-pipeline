@@ -69,6 +69,10 @@ type Entrypointer struct {
 	Results []string
 	// Timeout is an optional user-specified duration within which the Step must complete
 	Timeout *time.Duration
+
+	// CaptureExitCode indicates to capture the original container exit code, and return zero instead
+	// The original exit code is written in the termination message
+	CaptureExitCode bool
 }
 
 // Waiter encapsulates waiting for files to exist.
@@ -151,7 +155,7 @@ func (e Entrypointer) Go() error {
 	// Write the post file *no matter what*
 	// In case of ExitError write nil to capture the error
 	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if e.CaptureExitCode && errors.As(err, &ee) {
 		output = append(output, v1beta1.PipelineResourceResult{
 			Key:        "ExitCode",
 			Value:      strconv.Itoa(ee.ExitCode()),

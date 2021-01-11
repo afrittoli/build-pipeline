@@ -42,6 +42,7 @@ var (
 	results             = flag.String("results", "", "If specified, list of file names that might contain task results")
 	waitPollingInterval = time.Second
 	timeout             = flag.Duration("timeout", time.Duration(0), "If specified, sets timeout for step")
+	captureExitCode	    = flag.Bool("capture_exit_code", false, "If specified, capture the wrapped container exit code")
 )
 
 func cp(src, dst string) error {
@@ -107,6 +108,7 @@ func main() {
 		PostWriter:      &realPostWriter{},
 		Results:         strings.Split(*results, ","),
 		Timeout:         timeout,
+		CaptureExitCode: *captureExitCode,
 	}
 
 	// Copy any creds injected by the controller into the $HOME directory of the current
@@ -131,10 +133,15 @@ func main() {
 			// in both cases has an ExitStatus() method with the
 			// same signature.
 			if status, ok := t.Sys().(syscall.WaitStatus); ok {
-				// os.Exit(status.ExitStatus())
-				log.Printf("Captured non-zero exit code executing command (ExitError): %v", status.ExitStatus())
+				if *captureExitCode {
+					log.Printf("Captured non-zero exit code executing command (ExitError): %v", status.ExitStatus())
+				} else {
+					os.Exit(status.ExitStatus())
+				}
 			}
-			// log.Fatalf("Error executing command (ExitError): %v", err)
+			if !*captureExitCode {
+				log.Fatalf("Error executing command (ExitError): %v", err)
+			}
 		default:
 			log.Fatalf("Error executing command: %v", err)
 		}

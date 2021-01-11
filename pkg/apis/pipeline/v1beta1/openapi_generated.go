@@ -2903,6 +2903,13 @@ func schema_pkg_apis_pipeline_v1beta1_Step(ref common.ReferenceCallback) common.
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},
+					"captureExitCode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CaptureExitCode is an optional flag that controls the step exit code behaviour When set to true, the entrypoint captures any non-zero exit code from the wrapped command, replaces is with zero, and expose the original exit code via the container termination message",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"name"},
 			},

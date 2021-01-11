@@ -128,6 +128,10 @@ type Step struct {
 	// Timeout is the time after which the step times out. Defaults to never.
 	// Refer to Go's ParseDuration documentation for expected format: https://golang.org/pkg/time/#ParseDuration
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// CaptureExitCode is an optional flag that controls the step exit code behaviour
+	// When set to true, the entrypoint captures any non-zero exit code from the wrapped command, replaces is with
+	// zero, and expose the original exit code via the container termination message
+	CaptureExitCode bool `json:"captureExitCode,omitempty"`
 }
 
 // Sidecar has nearly the same data structure as Step, consisting of a Container and an optional Script, but does not have the ability to timeout.
